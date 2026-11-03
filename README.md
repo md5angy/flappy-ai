@@ -36,7 +36,7 @@ python -m http.server 8000
 Then open:
 http://localhost:8000
 
-<p align="center">
+<p align="left">
   <img src="docs/images/flappy_ai_run_1.png" width="800" alt="Flappy AI Run">
 </p>
 
@@ -46,11 +46,10 @@ YouTube: https://www.youtube.com/watch?v=ONKEq9kWku4
 
 🐈 About Miller Lab
 
-<p align="center">
+<p align="left">
   <img src="docs/images/miller-cat.png" width="240" alt="Miller Cat">
 </p>
 
-Miller Lab — One Experiment at a Time
 
 Miller Lab is a creative laboratory where I build games, experiment with artificial intelligence, explore programming, and try to turn unusual ideas into working projects.
 
