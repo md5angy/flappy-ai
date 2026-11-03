@@ -40,6 +40,29 @@ http://localhost:8000
   <img src="docs/images/flappy_ai_run_1.png" width="800" alt="Flappy AI Run">
 </p>
 
+## 🎮 Play Online
+
+**[▶ PLAY FLAPPY AI — Launch the Game](https://md5angy.github.io/flappy-ai/)**
+
+Play Flappy AI directly in your browser — no installation required!
+
+Choose between two game modes:
+
+- **HUMAN:** Play Flappy Bird yourself and try to beat your high score.
+- **AI TRAINING:** Watch a population of neural networks evolve and learn to navigate the pipes.
+
+Customize your AI experiment:
+
+- **Bird population:** 10–500 birds (default: 100).
+- **Simulation speed:** 1×, 2×, 5× or 10×.
+- **Live statistics:** Track generations, surviving birds, scores and fitness.
+
+Built with vanilla JavaScript and HTML5 Canvas. No backend or machine-learning framework required.
+
+<p align="left">
+  <img src="docs/images/flappy_ai_menu.png" width="800" alt="Flappy AI Run">
+</p>
+
 ## 🎬 Watch the experiment
 
 YouTube: https://www.youtube.com/watch?v=ONKEq9kWku4
