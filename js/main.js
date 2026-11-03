@@ -445,10 +445,14 @@
  * =============================================================================
  */
 
+import { NeuralNetwork as ModularNeuralNetwork } from "./ai/NeuralNetwork.js";
+import { calculateFitness as modularFitness, evolvePopulation } from "./ai/GeneticAlgorithm.js";
+import { createMenuController } from "./ui/Menu.js";
+
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
-const gameMode = "TRAINING"; // HUMAN oppure TRAINING
+let gameMode = null; // HUMAN, TRAINING oppure null quando è aperto il menu
 const populationSize = 100;
 
 const evolutionConfig = {
@@ -467,8 +471,7 @@ let bestFitnessEver = 0;
 let generationHistory = [];
 
 function calculateFitness(agent) {
-    return agent.survivalTime +
-        agent.score * evolutionConfig.pipeReward;
+    return modularFitness(agent, evolutionConfig.pipeReward);
 }
 
 
@@ -505,7 +508,7 @@ function calculateFitness(agent) {
  *   strength controlla l'ampiezza massima della modifica.
  */
 
-class NeuralNetwork {
+class LegacyNeuralNetwork {
     constructor() {
         // 6 neuroni nascosti, ognuno con 4 pesi
         this.weightsIH = Array.from({ length: 6 }, () =>
@@ -540,7 +543,7 @@ class NeuralNetwork {
                 this.biasH[i]
             );
 
-            return NeuralNetwork.sigmoid(sum);
+            return LegacyNeuralNetwork.sigmoid(sum);
         });
 
         // HIDDEN -> OUTPUT
@@ -549,11 +552,11 @@ class NeuralNetwork {
             this.biasO
         );
 
-        return NeuralNetwork.sigmoid(sum);
+        return LegacyNeuralNetwork.sigmoid(sum);
     }
 
     clone() {
-        const copy = new NeuralNetwork();
+        const copy = new LegacyNeuralNetwork();
 
         copy.weightsIH = this.weightsIH.map(row => [...row]);
         copy.biasH = [...this.biasH];
@@ -813,9 +816,7 @@ function playTrainingDeathSound() {
         die.play().catch(() => {});
     };
 
-    hit.play().catch(error => {
-    console.error("Errore audio TRAINING:", error);
-});
+    hit.play().catch(() => {});
 }
 
 let audioUnlocked = false;
@@ -876,7 +877,7 @@ const birdAnimation = {
 // STATO DEL GIOCO
 // =========================
 
-let gameState = "READY";
+let gameState = "MENU";
 let lastTime = null;
 let pipeTimer = 0;
 let score = 0;
@@ -925,7 +926,7 @@ function createBird() {
         lastScoredPipeId: -1,
 
         // AI
-        brain: new NeuralNetwork(),
+        brain: new ModularNeuralNetwork(),
         flapCooldown: 0,
         lastDecision: 0,
         lastJumpTime: -Infinity,
@@ -1381,7 +1382,7 @@ function drawNeuralNetworkVisualizer() {
             brain.biasH[i]
         );
 
-        return NeuralNetwork.sigmoid(sum);
+        return ModularNeuralNetwork.sigmoid(sum);
     });
 
     const output = brain.predict(inputs);
@@ -1824,6 +1825,45 @@ function resetGame() {
 }
 
 // =========================
+// MENU E CAMBIO MODALITÀ
+// =========================
+
+const menu = createMenuController({
+    onStartMode: startMode,
+    onReturnToMenu: returnToMenu
+});
+
+function updateMenuVisibility() {
+    menu.updateVisibility(gameState);
+}
+
+function stopSounds() {
+    sounds.hit.pause();
+    sounds.hit.onended = null;
+    sounds.die.pause();
+}
+
+function returnToMenu() {
+    stopSounds();
+    gameState = "MENU";
+    lastTime = null;
+    updateMenuVisibility();
+}
+
+function startMode(mode) {
+    gameMode = mode;
+
+    if (mode === "TRAINING") {
+        // La popolazione viene creata soltanto entrando in TRAINING.
+        resetTraining(null, true);
+    } else {
+        resetGame();
+    }
+
+    updateMenuVisibility();
+}
+
+// =========================
 // GAME LOOP
 // =========================
 
@@ -1847,6 +1887,14 @@ function gameLoop(timestamp) {
 
 
 document.addEventListener("keydown", function(event) {
+
+    if (event.code === "Escape") {
+        event.preventDefault();
+        if (gameState !== "MENU") returnToMenu();
+        return;
+    }
+
+    if (gameState === "MENU") return;
 
     if (event.code === "Space") {
         event.preventDefault();
@@ -1883,6 +1931,19 @@ document.addEventListener("keydown", function(event) {
 
     if (event.code === "KeyR") {
         resetGame();
+    }
+});
+
+canvas.addEventListener("click", function(event) {
+    if (gameState === "MENU" || gameMode !== "HUMAN") return;
+
+    if (gameState === "READY" || gameState === "PLAYING") {
+        event.preventDefault();
+        if (gameState === "READY") gameState = "PLAYING";
+        bird.velocityY = jumpStrength;
+        bird.timeSinceFlap = 0;
+        birdAnimation.rotation = birdJumpAngle * Math.PI / 180;
+        playSound("flap");
     }
 });
 
@@ -1948,6 +2009,29 @@ function selectParent(ranked) {
  */
 
 function createNextGeneration() {
+    const result = evolvePopulation(population, evolutionConfig);
+
+    bestScoreEver = Math.max(bestScoreEver, result.bestScore);
+    bestFitnessEver = Math.max(bestFitnessEver, result.bestFitness);
+    generationHistory.push({
+        generation,
+        bestScore: result.bestScore,
+        avgScore: result.avgScore,
+        bestFitness: result.bestFitness,
+        avgFitness: result.avgFitness
+    });
+
+    console.log(
+        `GEN ${generation} | ` +
+        `Best score: ${result.bestScore} | ` +
+        `Avg score: ${result.avgScore.toFixed(2)} | ` +
+        `Best fitness: ${result.bestFitness.toFixed(1)}`
+    );
+
+    generation++;
+    resetTraining(result.nextBrains, true);
+    return;
+
     // Valutazione finale dei 100 uccellini.
     for (const agent of population) {
         agent.fitness = calculateFitness(agent);
@@ -2298,9 +2382,7 @@ function updateTraining(deltaTime) {
 
 
 
-if (gameMode === "TRAINING") {
-    resetTraining();
-}
+updateMenuVisibility();
 
 
 // =========================

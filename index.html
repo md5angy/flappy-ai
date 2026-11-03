@@ -7,10 +7,22 @@
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-    <h1>MILLER LAB — #001 - FLAPPY AI</h1>
+    <main class="game-shell">
+        <canvas id="game" width="1280" height="720"></canvas>
+        <section id="mode-menu" class="mode-menu" aria-label="Selezione modalità">
+            <div class="mode-panel">
+                <p class="mode-eyebrow">MILLER LAB — EXPERIMENT #001</p>
+                <h1>FLAPPY AI</h1>
+                <p class="mode-prompt">SCEGLI LA MODALITÀ</p>
+                <div class="mode-actions">
+                    <button id="human-button" class="mode-button human-button" type="button"><span>HUMAN</span><small>PLAY</small></button>
+                    <button id="training-button" class="mode-button training-button" type="button"><span>TRAINING</span><small>START AI</small></button>
+                </div>
+            </div>
+        </section>
+        <button id="menu-button" class="menu-button" type="button">MENU</button>
+    </main>
 
-    <canvas id="game" width="1280" height="720"></canvas>
-
-    <script src="js/main.js"></script>
+    <script type="module" src="js/main.js"></script>
 </body>
 </html>
