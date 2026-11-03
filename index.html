@@ -14,6 +14,21 @@
                 <p class="mode-eyebrow">MILLER LAB — EXPERIMENT #001</p>
                 <h1>FLAPPY AI</h1>
                 <p class="mode-prompt">SCEGLI LA MODALITÀ</p>
+                <div class="training-settings">
+                    <h2>AI TRAINING SETTINGS</h2>
+                    <label for="population-input">Bird population
+                        <input id="population-input" type="number" value="100" min="10" max="500" step="1" inputmode="numeric">
+                    </label>
+                    <label for="speed-input">Simulation speed
+                        <select id="speed-input">
+                            <option value="1">1× — Normal</option>
+                            <option value="2">2× — Fast</option>
+                            <option value="5">5× — Very Fast</option>
+                            <option value="10">10× — Maximum</option>
+                        </select>
+                    </label>
+                    <p id="settings-error" class="settings-error" role="alert" aria-live="polite"></p>
+                </div>
                 <div class="mode-actions">
                     <button id="human-button" class="mode-button human-button" type="button"><span>HUMAN</span><small>PLAY</small></button>
                     <button id="training-button" class="mode-button training-button" type="button"><span>TRAINING</span><small>START AI</small></button>

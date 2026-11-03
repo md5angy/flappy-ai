@@ -13,8 +13,8 @@
  *   Il giocatore controlla un singolo uccellino premendo SPAZIO.
  *
  * TRAINING:
- *   Una popolazione di 100 uccellini viene controllata da altrettante reti
- *   neurali. Le reti vengono migliorate attraverso un algoritmo genetico.
+ *   Una popolazione configurabile viene controllata da reti neurali 4 -> 6 -> 1.
+ *   La selezione evolutiva è implementata nel modulo GeneticAlgorithm.js.
  *
  *
  * OBIETTIVO DELL'ESPERIMENTO
@@ -58,7 +58,7 @@
  *
  *      http://localhost:8000
  *
- * 4. Premere SPAZIO per avviare il training.
+ * 4. Selezionare TRAINING dal menu e configurare popolazione e velocità.
  *
  * NOTA:
  * Python NON esegue la rete neurale.
@@ -165,7 +165,7 @@
  *
  * CICLO EVOLUTIVO:
  *
- *   1. Creazione di 100 reti con pesi casuali.
+ *   1. Creazione della popolazione configurata con reti casuali.
  *
  *   2. Simulazione degli uccellini nello stesso ambiente.
  *
@@ -179,7 +179,7 @@
  *
  *   7. I 5 migliori cervelli vengono conservati senza mutazioni (elitismo).
  *
- *   8. Gli altri 95 cervelli vengono creati clonando e mutando
+ *   8. I cervelli non elitari vengono creati clonando e mutando
  *      genitori selezionati tra i migliori 20.
  *
  *   9. Inizia automaticamente una nuova generazione.
@@ -320,7 +320,7 @@
  *                            +-- Movimento tubi
  *                            +-- Input delle reti
  *                            +-- Decisione di salto
- *                            +-- Fisica dei 100 agenti
+ *                            +-- Fisica degli agenti configurati
  *                            +-- Collisioni
  *                            +-- Punteggi individuali
  *                            +-- Fine generazione
@@ -419,12 +419,12 @@
  *    di consentire la riproduzione audio.
  *
  * 6. Performance
- *    Il gioco aggiorna e disegna 100 agenti a ogni frame.
+ *    Il gioco aggiorna e disegna la popolazione configurata a ogni frame.
  *    L'algoritmo genetico viene eseguito solo al termine
  *    di una generazione, non a ogni frame.
  *
  * 7. Persistenza
- *    Non è ancora implementato il salvataggio dei cervelli.
+ *    I pesi non vengono salvati su storage persistente.
  *    Ricaricando la pagina si perde l'addestramento corrente.
  *
  *
@@ -453,7 +453,11 @@ const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
 let gameMode = null; // HUMAN, TRAINING oppure null quando è aperto il menu
-const populationSize = 100;
+let populationSize = 100;
+let simulationSpeed = 1;
+const fixedSimulationStep = 1 / 60;
+const maxSimulationStepsPerFrame = 120;
+let simulationAccumulator = 0;
 
 const evolutionConfig = {
     eliteCount: 5,
@@ -478,7 +482,7 @@ function calculateFitness(agent) {
 
 
 /**
- * Rappresenta il cervello di un singolo uccellino.
+ * La rete neurale usata dagli uccellini è definita in ai/NeuralNetwork.js.
  *
  * La rete ha una topologia fissa:
  * - 4 neuroni di input
@@ -507,85 +511,6 @@ function calculateFitness(agent) {
  *   rate controlla la probabilità di mutazione.
  *   strength controlla l'ampiezza massima della modifica.
  */
-
-class LegacyNeuralNetwork {
-    constructor() {
-        // 6 neuroni nascosti, ognuno con 4 pesi
-        this.weightsIH = Array.from({ length: 6 }, () =>
-            Array.from({ length: 4 }, () => Math.random() * 2 - 1)
-        );
-
-        // Un bias per ogni neurone nascosto
-        this.biasH = Array.from(
-            { length: 6 },
-            () => Math.random() * 2 - 1
-        );
-
-        // 6 pesi verso il neurone di output
-        this.weightsHO = Array.from(
-            { length: 6 },
-            () => Math.random() * 2 - 1
-        );
-
-        // Bias del neurone di output
-        this.biasO = Math.random() * 2 - 1;
-    }
-
-    static sigmoid(x) {
-        return 1 / (1 + Math.exp(-x));
-    }
-
-    predict(inputs) {
-        // INPUT -> HIDDEN
-        const hidden = this.weightsIH.map((weights, i) => {
-            const sum = weights.reduce(
-                (total, weight, j) => total + weight * inputs[j],
-                this.biasH[i]
-            );
-
-            return LegacyNeuralNetwork.sigmoid(sum);
-        });
-
-        // HIDDEN -> OUTPUT
-        const sum = this.weightsHO.reduce(
-            (total, weight, i) => total + weight * hidden[i],
-            this.biasO
-        );
-
-        return LegacyNeuralNetwork.sigmoid(sum);
-    }
-
-    clone() {
-        const copy = new LegacyNeuralNetwork();
-
-        copy.weightsIH = this.weightsIH.map(row => [...row]);
-        copy.biasH = [...this.biasH];
-        copy.weightsHO = [...this.weightsHO];
-        copy.biasO = this.biasO;
-
-        return copy;
-    }
-
-    mutate(rate, strength) {
-        const mutateValue = value => {
-            if (Math.random() >= rate) return value;
-
-            return value +
-                (Math.random() * 2 - 1) * strength;
-        };
-
-        this.weightsIH = this.weightsIH.map(row =>
-            row.map(mutateValue)
-        );
-
-        this.biasH = this.biasH.map(mutateValue);
-        this.weightsHO = this.weightsHO.map(mutateValue);
-        this.biasO = mutateValue(this.biasO);
-
-        return this;
-    }
-
-}
 
 // =========================
 // INPUT DELLA RETE
@@ -890,7 +815,7 @@ let pipes = [];
  * In HUMAN viene utilizzata una posizione iniziale fissa.
  *
  * In TRAINING la posizione iniziale varia leggermente per rendere
- * visibili i 100 agenti, evitando che siano perfettamente sovrapposti.
+ * visibili gli agenti, evitando che siano perfettamente sovrapposti.
  *
  * Questa dispersione introduce una variabile sperimentale:
  * due cervelli identici possono ottenere risultati differenti
@@ -1616,7 +1541,8 @@ function drawTrainingMetrics() {
         ["AVG SCORE", currentAverageScore.toFixed(2)],
         ["BEST FITNESS", currentBestFitness.toFixed(1)],
         ["AVG FITNESS", currentAverageFitness.toFixed(1)],
-        ["GEN TIME", `${generationTime.toFixed(1)}s`]
+        ["GEN TIME", `${generationTime.toFixed(1)}s`],
+        ["SPEED", `${simulationSpeed}×`]
     ];
 
     ctx.save();
@@ -1828,6 +1754,16 @@ function resetGame() {
 // MENU E CAMBIO MODALITÀ
 // =========================
 
+/** Starts a fresh TRAINING experiment, including records and population. */
+function resetTrainingSession() {
+    generation = 1;
+    generationTime = 0;
+    bestScoreEver = 0;
+    bestFitnessEver = 0;
+    generationHistory = [];
+    resetTraining(null, true);
+}
+
 const menu = createMenuController({
     onStartMode: startMode,
     onReturnToMenu: returnToMenu
@@ -1847,16 +1783,19 @@ function returnToMenu() {
     stopSounds();
     gameState = "MENU";
     lastTime = null;
+    simulationAccumulator = 0;
     updateMenuVisibility();
 }
 
-function startMode(mode) {
+function startMode(mode, settings = null) {
     gameMode = mode;
 
     if (mode === "TRAINING") {
-        // La popolazione viene creata soltanto entrando in TRAINING.
-        resetTraining(null, true);
+        populationSize = settings.populationSize;
+        simulationSpeed = settings.simulationSpeed;
+        resetTrainingSession();
     } else {
+        simulationSpeed = 1;
         resetGame();
     }
 
@@ -1875,7 +1814,27 @@ function gameLoop(timestamp) {
 
     deltaTime = Math.min(deltaTime, 0.05);
 
-    update(deltaTime);
+    if (gameMode === "TRAINING" && simulationSpeed > 1) {
+        simulationAccumulator += deltaTime * simulationSpeed;
+
+        let steps = 0;
+        while (
+            simulationAccumulator >= fixedSimulationStep &&
+            steps < maxSimulationStepsPerFrame
+        ) {
+            update(fixedSimulationStep);
+            simulationAccumulator -= fixedSimulationStep;
+            steps++;
+        }
+
+        // Drop excess accumulated time after a stall to avoid a browser lock.
+        if (steps === maxSimulationStepsPerFrame) {
+            simulationAccumulator = 0;
+        }
+    } else {
+        // Preserve the original variable-delta path at 1× and in HUMAN.
+        update(deltaTime);
+    }
     draw();
 
     requestAnimationFrame(gameLoop);
@@ -1949,31 +1908,6 @@ canvas.addEventListener("click", function(event) {
 
 
 
-function selectParent(ranked) {
-    const pool = ranked.slice(
-        0,
-        evolutionConfig.parentPoolSize
-    );
-
-    // Selezione a torneo: tra tre candidati
-    // casuali scegliamo quello con fitness maggiore.
-    let winner = null;
-
-    for (let i = 0; i < 3; i++) {
-        const candidate = pool[
-            Math.floor(Math.random() * pool.length)
-        ];
-
-        if (!winner || candidate.fitness > winner.fitness) {
-            winner = candidate;
-        }
-    }
-
-    return winner;
-}
-
-
-
 /**
  * Esegue una transizione evolutiva tra due generazioni.
  *
@@ -1989,7 +1923,7 @@ function selectParent(ranked) {
  * 4. Aggiornamento dei record storici.
  * 5. Registrazione dei risultati in generationHistory.
  * 6. Conservazione dei migliori 5 cervelli senza modifiche.
- * 7. Creazione di altri 95 cervelli tramite clonazione e mutazione.
+ * 7. Creazione dei cervelli non elitari tramite clonazione e mutazione.
  * 8. Incremento del numero della generazione.
  * 9. Reset dell'ambiente e avvio automatico.
  *
@@ -2030,81 +1964,12 @@ function createNextGeneration() {
 
     generation++;
     resetTraining(result.nextBrains, true);
-    return;
-
-    // Valutazione finale dei 100 uccellini.
-    for (const agent of population) {
-        agent.fitness = calculateFitness(agent);
-    }
-
-    const ranked = [...population].sort(
-        (a, b) => b.fitness - a.fitness
-    );
-
-    const best = ranked[0];
-
-    const bestScore = Math.max(
-        ...population.map(agent => agent.score)
-    );
-
-    const avgScore = population.reduce(
-        (sum, agent) => sum + agent.score, 0
-    ) / population.length;
-
-    const avgFitness = population.reduce(
-        (sum, agent) => sum + agent.fitness, 0
-    ) / population.length;
-
-    bestScoreEver = Math.max(bestScoreEver, bestScore);
-    bestFitnessEver = Math.max(bestFitnessEver, best.fitness);
-
-    generationHistory.push({
-        generation: generation,
-        bestScore: bestScore,
-        avgScore: avgScore,
-        bestFitness: best.fitness,
-        avgFitness: avgFitness
-    });
-
-    console.log(
-        `GEN ${generation} | ` +
-        `Best score: ${bestScore} | ` +
-        `Avg score: ${avgScore.toFixed(2)} | ` +
-        `Best fitness: ${best.fitness.toFixed(1)}`
-    );
-
-    // Conserviamo i 5 migliori cervelli senza mutazioni.
-    const nextBrains = [];
-
-    for (let i = 0; i < evolutionConfig.eliteCount; i++) {
-        nextBrains.push(ranked[i].brain.clone());
-    }
-
-    // Gli altri 95 derivano da genitori selezionati.
-    while (nextBrains.length < populationSize) {
-        const parent = selectParent(ranked);
-
-        const childBrain = parent.brain
-            .clone()
-            .mutate(
-                evolutionConfig.mutationRate,
-                evolutionConfig.mutationStrength
-            );
-
-        nextBrains.push(childBrain);
-    }
-
-    generation++;
-
-    // Nuova generazione, partenza automatica.
-    resetTraining(nextBrains, true);
 }
 
 
 // =========================
-// TRAINING - MILESTONE AI-01/02
-// Nessuna rete neurale:
-// gli agenti non saltano ancora.
+// TRAINING
+// Population updates and evolution are delegated to the AI modules.
 // =========================
 
 function resetTraining(brains = null, autoStart = false) {
