@@ -65,7 +65,7 @@ Built with vanilla JavaScript and HTML5 Canvas. No backend or machine-learning f
 
 ## 🎬 Watch the experiment
 
-YouTube: https://www.youtube.com/watch?v=ONKEq9kWku4
+YouTube: https://youtu.be/NTxHwptqofs
 
 🐈 About Miller Lab
 
