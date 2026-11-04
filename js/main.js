@@ -465,7 +465,8 @@ const evolutionConfig = {
     mutationRate: 0.15,
     mutationStrength: 0.35,
     pipeReward: 100,
-    maxGenerationTime: 320
+    // 320 s era il limite precedente: la sessione/generazione dura ora 3 minuti in più.
+    maxGenerationTime: 500
 };
 
 let generation = 1;
@@ -592,6 +593,8 @@ const pipeWidth = 90;
 const pipeGap = 220;
 const pipeSpeed = 200;
 const pipeInterval = 2.2;
+const pipeMinInterval = 1.2;
+const maxDifficultyPipes = 50;
 
 // =========================
 // CONFIGURAZIONE BIRD
@@ -774,12 +777,9 @@ const pipeSprite = new Image();
 pipeSprite.onerror = () => console.error("Impossibile caricare pipe01.png");
 pipeSprite.src = "assets/pipes/pipe01.png";
 
-const trainingPipeSequence = [
-    180, 240, 130, 280, 200,
-    100, 260, 160, 230, 140
-];
-
-let trainingPipeIndex = 0;
+let trainingPreviousGapY = null;
+let trainingPreviousGapBand = null;
+let trainingPipesPassed = 0;
 
 const pipeSourceWidth = 52;
 const pipeSourceHeight = 64;
@@ -875,10 +875,63 @@ let nextPipeId = 0;
 // =========================
 
 function createPipe() {
-    const margin = 65;
+    const margin = bird.size;
     const minGapY = margin;
     const maxGapY = groundY - pipeGap - margin;
-    const gapY = gameMode === "TRAINING" ? Math.max(minGapY, Math.min(maxGapY, trainingPipeSequence[trainingPipeIndex++ % trainingPipeSequence.length])) : minGapY + Math.random() * (maxGapY - minGapY);
+    const verticalRange = maxGapY - minGapY;
+    let gapY;
+
+    if (gameMode === "TRAINING") {
+        const difficulty = getTrainingDifficulty();
+        const bandCenters = [
+            minGapY + verticalRange * 0.10,
+            minGapY + verticalRange * 0.50,
+            minGapY + verticalRange * 0.90
+        ];
+
+        // I tubi usano tre bande verticali; i successivi cambiano banda,
+        // evitando sequenze identiche ma mantenendo una traiettoria leggibile.
+        let candidateBands = [0, 1, 2].filter(
+            band => band !== trainingPreviousGapBand
+        );
+
+        // Ogni tanto consentiamo un cambio più marcato, sempre entro i limiti
+        // conservativi definiti sopra e non entro una distanza impossibile.
+        const markedChange =
+            trainingPreviousGapBand !== null && Math.random() < 0.12;
+
+        if (markedChange) {
+            const distantBands = candidateBands.filter(
+                band => Math.abs(band - trainingPreviousGapBand) === 2
+            );
+
+            if (distantBands.length > 0) {
+                candidateBands = distantBands;
+            }
+        }
+
+        const targetBand = candidateBands[
+            Math.floor(Math.random() * candidateBands.length)
+        ];
+        const targetGapY = bandCenters[targetBand];
+
+        if (trainingPreviousGapY === null) {
+            gapY = targetGapY + (Math.random() - 0.5) * verticalRange * 0.12;
+        } else {
+            const normalStep = verticalRange * (0.24 + difficulty * 0.08);
+            const markedStep = verticalRange * (0.42 + difficulty * 0.08);
+            const maxStep = markedChange ? markedStep : normalStep;
+            const delta = Math.max(-maxStep, Math.min(maxStep, targetGapY - trainingPreviousGapY));
+
+            gapY = trainingPreviousGapY + delta;
+        }
+
+        gapY = Math.max(minGapY, Math.min(maxGapY, gapY));
+        trainingPreviousGapY = gapY;
+        trainingPreviousGapBand = targetBand;
+    } else {
+        gapY = minGapY + Math.random() * verticalRange;
+    }
 
     pipes.push({
         x: canvas.width,
@@ -886,8 +939,26 @@ function createPipe() {
         gapY: gapY,
         gapHeight: pipeGap,
         scored: false,
+        difficultyCounted: false,
         id: nextPipeId++
     });
+}
+
+function getTrainingDifficulty() {
+    return Math.max(
+        0,
+        Math.min(1, trainingPipesPassed / maxDifficultyPipes)
+    );
+}
+
+function getCurrentPipeInterval() {
+    if (gameMode !== "TRAINING") return pipeInterval;
+
+    const difficulty = getTrainingDifficulty();
+    const interval = pipeInterval -
+        (pipeInterval - pipeMinInterval) * difficulty;
+
+    return Math.max(pipeMinInterval, interval);
 }
 
 // =========================
@@ -1038,9 +1109,11 @@ function update(deltaTime) {
     // Generazione tubi
     pipeTimer += deltaTime;
 
-    while (pipeTimer >= pipeInterval) {
+    const currentPipeInterval = getCurrentPipeInterval();
+
+    while (pipeTimer >= currentPipeInterval) {
         createPipe();
-        pipeTimer -= pipeInterval;
+        pipeTimer -= currentPipeInterval;
     }
 
     // Movimento tubi
@@ -1986,7 +2059,9 @@ function resetTraining(brains = null, autoStart = false) {
         }
     );
 
-    trainingPipeIndex = 0;
+    trainingPreviousGapY = null;
+    trainingPreviousGapBand = null;
+    trainingPipesPassed = 0;
     pipes = [];
     pipeTimer = 0;
     nextPipeId = 0;
@@ -2099,9 +2174,11 @@ function updateTraining(deltaTime) {
     // Generazione tubi
     pipeTimer += deltaTime;
 
-    while (pipeTimer >= pipeInterval) {
+    const currentPipeInterval = getCurrentPipeInterval();
+
+    while (pipeTimer >= currentPipeInterval) {
         createPipe();
-        pipeTimer -= pipeInterval;
+        pipeTimer -= currentPipeInterval;
     }
 
     // Movimento tubi condivisi
@@ -2219,6 +2296,17 @@ function updateTraining(deltaTime) {
             ) {
                 agent.score++;
                 agent.lastScoredPipeId = pipe.id;
+            }
+
+            // Un solo contatore condiviso misura la progressione della partita.
+            // Il tubo viene contato quando almeno un uccellino ancora vivo lo
+            // supera, quindi la difficoltà non cala se quell'uccellino muore.
+            if (
+                !pipe.difficultyCounted &&
+                agent.x > pipe.x + pipe.width
+            ) {
+                pipe.difficultyCounted = true;
+                trainingPipesPassed++;
             }
         }
 
